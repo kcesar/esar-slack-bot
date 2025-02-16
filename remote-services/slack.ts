@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { WebClient, type Channel, type Member } from '@slack/web-api';
+import { Block, RichTextBlock, SectionBlock, WebClient, type Channel, type Member } from '@slack/web-api';
 
 interface SlackCache {
   timestamp: number,
@@ -20,7 +20,7 @@ export default class SlackClient {
     this.web = new WebClient(botToken);
   }
 
-  async getRegularMembers() {
+  async getRegularMembers(): Promise<Member[]> {
     await this.init();
     return this.memberCache.filter(m => !m.is_deleted && !m.is_bot && m.id !== 'USLACKBOT');
   }
@@ -39,7 +39,17 @@ export default class SlackClient {
     await this.init();
     return channel.startsWith('#')
       ? Object.values(this.channelLookup).find(c => c.name === channel.substring(1))
+      : channel.startsWith('@')
+      ? this.memberCache.find(m => m.real_name.localeCompare(channel.substring(1), undefined, { sensitivity: 'accent' }) === 0)?.id
       : this.channelLookup[channel];
+  }
+
+  async send(rcpt: string, message: string|Block[]) {
+    const rcptId = await this.getChannel(rcpt);
+    const channel = (await this.web.conversations.open(rcpt.startsWith('@') ? { users: rcptId } : { channel: rcptId })).channel?.id;
+    if (channel) {
+      await this.web.chat.postMessage(typeof message === 'string' ? {channel, text: message } : { channel, blocks: message });
+    }
   }
 
   async inviteToChannel(channel: string, userIds: string[]) {
@@ -59,6 +69,37 @@ export default class SlackClient {
       channel = Object.values(this.channelLookup).find(c => c.name === channel.substring(1))?.id;
     }
     return ((await this.web.conversations.members({ channel })).members ?? []).map(id => this.memberLookup[id] ?? id);
+  }
+
+  static listToListBlock(list: string[]): RichTextBlock {
+    return {
+      type: "rich_text",
+      elements: [{
+        type: "rich_text_list",
+        style: "bullet",
+        indent: 0,
+        elements: list.map(l => ({
+          type: "rich_text_section",
+          elements: [
+            {
+              type: "text",
+              text: l
+            }
+          ]
+        }))
+      }]
+    };
+  }
+
+  static textToBlock(text: string): SectionBlock {
+    return {
+      type: "section",
+      text: {
+        type: "plain_text",
+        text,
+        emoji: true
+      }
+    }
   }
 
   private async init() {

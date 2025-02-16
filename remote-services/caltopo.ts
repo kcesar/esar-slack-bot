@@ -1,6 +1,16 @@
 import Axios from 'axios';
 import crypto from 'crypto';
 
+export interface CaltopoMembership {
+  provider: string;
+  created: number;
+  direct: boolean;
+  fullName: string;
+  permission: number;
+  id: string;
+  email: string;
+};
+
 export default class CalTopoClient {
   axios = Axios.create({
     baseURL: 'https://caltopo.com'
@@ -13,6 +23,10 @@ export default class CalTopoClient {
     this.accountId = args.accountId;
     this.authId = args.authId;
     this.authKey = args.authKey;
+  }
+
+  async getTeamMembers(teamId: string) {
+    return (await this.get(`/api/v0/group/${teamId}/members`)).list as CaltopoMembership[];
   }
 
   /**
@@ -106,3 +120,4 @@ export default class CalTopoClient {
     return `${this.axios.defaults.baseURL}${relativeUrl}?${this.signUrl('GET', relativeUrl, payload)}`;
   }
 }
+

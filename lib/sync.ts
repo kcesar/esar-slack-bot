@@ -5,7 +5,12 @@ export interface SyncSettings {
   users: {
     d4h: {
       membersGroup: number;
-    }
+    },
+    caltopo: {
+      teamId: string;
+      extraMembers: string[];
+      emailMap: Record<string, string>;
+    },
   }
 }
 export async function loadSyncSettings() {
