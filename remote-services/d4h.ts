@@ -159,6 +159,11 @@ export class D4HClient {
     return list;
   }
 
+  async getOperationalGroup() {
+    await this.reload();
+    return this.groupsCache[OPERATIONAL_STATUS_GROUP_ID];
+  }
+
   async reload() {
     const now = new Date().getTime();
     if (now - this.cacheTime < 5 * 60 * 1000) {

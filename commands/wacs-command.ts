@@ -19,7 +19,7 @@ async function getTrainingMessage(email: string, d4h: D4HClient): Promise<[strin
   const quals = asLookup(await d4h.getMemberQualifications(d4hMember.id), a => a.qualification.id);
   const lines: string[] = [];
   const now = new Date().getTime();
-  for (const group of d4hMember.groups) {
+  for (const group of [await d4h.getOperationalGroup(), ...d4hMember.groups]) {
     if (!group.expectations?.length) continue;
 
     lines.push(`*${group.title}*`);
