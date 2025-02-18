@@ -1,6 +1,25 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { Block, RichTextBlock, SectionBlock, WebClient, type Channel, type Member } from '@slack/web-api';
+import { Block, MessageAttachment, RichTextBlock, SectionBlock, WebClient, type Channel, type Member } from '@slack/web-api';
+
+export interface SlashCommandLite {
+  command: string;
+  text: string;
+  channel_id: string;
+  user_id: string;
+}
+
+export interface SlashCommand extends SlashCommandLite {
+  token: string;
+  team_id: string;
+  team_domain: string;
+  channel_name: string;
+  user_name: string;
+  api_app_id: string;
+  is_enterprise_install: string;
+  response_url: string;
+  trigger_id: string;
+}
 
 interface SlackCache {
   timestamp: number,
@@ -50,6 +69,10 @@ export default class SlackClient {
     if (channel) {
       await this.web.chat.postMessage(typeof message === 'string' ? {channel, text: message } : { channel, blocks: message });
     }
+  }
+
+  post(channel: string, text: string, extra?: { blocks?: Block[], attachments?: MessageAttachment[] }) {
+    return this.web.chat.postMessage({ channel, text, blocks: extra?.blocks, attachments: extra?.attachments });
   }
 
   async inviteToChannel(channel: string, userIds: string[]) {

@@ -1,4 +1,18 @@
+import { readFile } from 'fs/promises';
+import { join as pathJoin } from 'path';
 import axios, { Axios } from 'axios';
+import { equalsInsensitive } from '../lib/util';
+
+export const OPERATIONAL_STATUS_GROUP_ID = -1;
+
+interface ExpectationSetting {
+  course: string;
+  type: 'simple';
+}
+
+export interface D4HSettings {
+  expectations: Record<string, ExpectationSetting[]>;
+}
 
 export interface D4HMember {
   id: number;
@@ -8,6 +22,7 @@ export interface D4HMember {
   teamEmail?: string;
   emails: string[];
   photo?: string;
+  groups: D4HGroup[];
 }
 
 interface v3Member {
@@ -42,11 +57,52 @@ interface v2Member {
   group_ids: number[];
 }
 
+interface D4HQualification {
+  id: number;
+  cost: unknown | null;
+  description: string;
+  expiredCost: unknown | null;
+  reminderDays: number;
+  title: string;
+  deprecatedBundle?: string;
+  createdAt: string;
+  updatedAt: string;
+  expiresMonthsDefault: number;
+}
+
+interface D4HAward {
+  id: number;
+  startsAt: Date;
+  endsAt: Date | null;
+  qualification: {
+    id: number;
+    title: string;
+  };
+  member: {
+    id: number;
+  }
+}
+
+export interface D4HExpectation {
+  qualification: { id: number, title: string };
+  type: 'simple';
+}
+
+interface D4HGroup {
+  id: number;
+  title: string;
+  expectations: D4HExpectation[];
+}
+
 export class D4HClient {
   private readonly web: Axios;
   private readonly web2: Axios;
+  private settings: D4HSettings = {} as D4HSettings;
+
   private cacheTime: number = 0;
-  private membersCache: Record<string, D4HMember>;
+  private membersCache: Record<number, D4HMember>;
+  private qualificationsCache: Record<number, D4HQualification>;
+  private groupsCache: Record<number, D4HGroup>;
   private readonly teamDomain: string;
 
   constructor(teamId: string, teamDomain: string, v3Token: string, v2Token: string) {
@@ -71,7 +127,7 @@ export class D4HClient {
   }
 
   async getGroupMembers(groupId: number, options?: { includeRetired?: boolean }) {
-    await this.loadMembers();
+    await this.reload();
     const membership = await this.getChunkedList<D4HMembership>(`member-group-memberships?group_id=${groupId}`);
     let members = membership.map(m => {
       const member = this.membersCache[m.member.id];
@@ -84,11 +140,62 @@ export class D4HClient {
     return members;
   }
 
-  private async loadMembers() {
+  async getMemberByEmail(email: string) {
+    await this.reload();
+    return Object.values(this.membersCache).find(f => f.emails.includes(email));
+  }
+
+  async getMemberQualifications(memberId: number) {
+    const list: D4HAward[] = [];
+
+    for (const award of await this.getChunkedList<D4HAward>(`member-qualification-awards?member_id=${memberId}`)) {
+      if (!award.qualification) {
+        console.log('no qualification', award);
+        continue;
+      }
+      const qual = this.qualificationsCache[award.qualification.id];
+      list.push({ qualification: qual, startsAt: award.startsAt, endsAt: award.endsAt } as any);
+    }
+    return list;
+  }
+
+  async reload() {
     const now = new Date().getTime();
     if (now - this.cacheTime < 5 * 60 * 1000) {
       return;
     }
+
+    this.settings = JSON.parse(await readFile(pathJoin(__dirname, '../data/d4h-config.json'), 'utf-8'));
+
+
+    this.qualificationsCache = {};
+    const qualList: D4HQualification[] = [];
+    for (const qual of await this.getChunkedList<D4HQualification>('member-qualifications')) {
+      this.qualificationsCache[qual.id] = qual;
+      qualList.push(qual);
+    }
+
+    this.groupsCache = {};
+    const groupsList = [
+      ...await this.getChunkedList<{ id: number, title: string }>('member-groups'),
+      { id: OPERATIONAL_STATUS_GROUP_ID, title: "OPERATIONAL" },
+    ];
+
+    for (const group of groupsList) {
+      this.groupsCache[group.id] = {
+        ...group,
+        expectations: this.settings.expectations[group.title]
+          ?.map(e => ({ ...e, q: qualList.find(f => equalsInsensitive(f.title, e.course)) }))
+          .filter(e => {
+            if (!e.q) console.log(`Cant find qualification matching ${e.course}`);
+            return !!e.q;
+          })
+          .map(({ q, ...e }) => ({ ...e, qualification: { id: q!.id, title: q!.title } }))
+          ?? []
+      };
+    }
+
+    // =========== MEMBERS
     const secondaryEmailField = (await this.getChunkedList2<v2CustomField>('fields', `team/custom-fields`)).find(f => f.title === 'Secondary Email');
     if (!secondaryEmailField) {
       console.log('Can\'t find Secondary Email field');
@@ -104,6 +211,7 @@ export class D4HClient {
         name: member.name,
         emails: [],
         status: member.status.value.toUpperCase(),
+        groups: (member.group_ids ?? []).map(groupId => this.groupsCache[groupId]).filter(g => !!g)
       };
 
       if (member.email) {
@@ -121,6 +229,11 @@ export class D4HClient {
       members[member.id].teamEmail = members[member.id].emails.find(e => e.toLowerCase().endsWith(`@${this.teamDomain}`))?.toLowerCase();
     }
     this.membersCache = members;
+  }
+
+  async getGroups(): Promise<Record<number, D4HGroup>> {
+    await this.reload();
+    return this.groupsCache;
   }
 
   private async getChunkedList<T>(url: string): Promise<T[]> {

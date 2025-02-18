@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import { google } from 'googleapis';
+import { equalsInsensitive } from '../lib/util';
 
 export interface GoogleUser {
   primaryEmail: string,
@@ -39,7 +40,7 @@ class WorkspaceClient {
     this.credentialsJson = credentialsJson;
   }
 
-  private async init() {
+  async init() {
     await this.loadUsers();
     return this;
   }
@@ -62,6 +63,11 @@ class WorkspaceClient {
   async getUserFromEmail(email: string) {
     await this.init();
     return this.cacheUsers.lookup[email];
+  }
+
+  async getUsersByName(fullName: string) {
+    await  this.init();
+    return this.cacheUsers.users.filter(f => equalsInsensitive(f.name.fullName, fullName));
   }
 
   async getGroupMembers(groupKey: string) {
