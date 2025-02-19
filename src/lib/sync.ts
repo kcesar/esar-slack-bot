@@ -14,5 +14,5 @@ export interface SyncSettings {
   }
 }
 export async function loadSyncSettings() {
-  return JSON.parse(await fs.readFile(join(__dirname, '../data/sync-settings.json'), 'utf-8')) as SyncSettings;
+  return JSON.parse(await fs.readFile(join(__dirname, '../../data/sync-settings.json'), 'utf-8')) as SyncSettings;
 }

@@ -1,7 +1,7 @@
 import { readFile } from 'fs/promises';
 import { join as pathJoin } from 'path';
 import axios, { Axios } from 'axios';
-import { equalsInsensitive } from '../lib/util';
+import { equalsInsensitive } from '../../lib/util';
 
 export const OPERATIONAL_STATUS_GROUP_ID = -1;
 
@@ -170,7 +170,7 @@ export class D4HClient {
       return;
     }
 
-    this.settings = JSON.parse(await readFile(pathJoin(__dirname, '../data/d4h-config.json'), 'utf-8'));
+    this.settings = JSON.parse(await readFile(pathJoin(__dirname, '../../../data/d4h-config.json'), 'utf-8'));
 
 
     this.qualificationsCache = {};

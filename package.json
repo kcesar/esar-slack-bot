@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "start": "tsx server.ts"
+    "start": "tsx src/server.ts"
   },
   "dependencies": {
     "@dotenvx/dotenvx": "github:dotenvx/dotenvx",

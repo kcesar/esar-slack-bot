@@ -130,7 +130,7 @@ export default class SlackClient {
       return;
     }
 
-    const cacheFile = path.join(__dirname, '../data/slack-cache.json');
+    const cacheFile = path.join(__dirname, '../../../data/slack-cache.json');
     let cache: SlackCache | undefined;
     try {
       const cacheJson = await fs.readFile(cacheFile, 'utf-8');

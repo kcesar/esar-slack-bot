@@ -5,7 +5,7 @@ import { wrapper } from 'axios-cookiejar-support';
 import { CookieJar } from 'tough-cookie';
 import { parse as parseHtml } from 'node-html-parser';
 
-import { D4HClient, OPERATIONAL_STATUS_GROUP_ID } from '../remote-services/d4h';
+import { D4HClient, OPERATIONAL_STATUS_GROUP_ID } from '../src/lib/remote-services/d4h';
 
 
 /**

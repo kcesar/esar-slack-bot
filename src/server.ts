@@ -1,11 +1,11 @@
 import { config } from '@dotenvx/dotenvx';
 import express from 'express';
 import { LogLevel, SocketModeClient } from '@slack/socket-mode';
-import WorkspaceClient from './remote-services/googleWorkspace';
-import { D4HClient } from './remote-services/d4h';
+import WorkspaceClient from './lib/remote-services/googleWorkspace';
+import { D4HClient } from './lib/remote-services/d4h';
 import { SyncUsersTask } from './tasks/sync-users';
-import CalTopoClient from './remote-services/caltopo';
-import SlackClient from './remote-services/slack';
+import CalTopoClient from './lib/remote-services/caltopo';
+import SlackClient from './lib/remote-services/slack';
 import CommandRouter from './commands';
 
 config({ path: ['.env.local', '.env'], ignore: ['MISSING_ENV_FILE'] });

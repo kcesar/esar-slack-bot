@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import { google } from 'googleapis';
-import { equalsInsensitive } from '../lib/util';
+import { equalsInsensitive } from '../../lib/util';
 
 export interface GoogleUser {
   primaryEmail: string,

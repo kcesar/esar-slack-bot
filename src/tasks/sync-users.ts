@@ -1,8 +1,8 @@
 import { loadSyncSettings } from "../lib/sync";
-import CalTopoClient, { CaltopoMembership } from "../remote-services/caltopo";
-import { D4HClient, D4HMember } from "../remote-services/d4h";
-import WorkspaceClient, { GoogleUser } from "../remote-services/googleWorkspace";
-import SlackClient from "../remote-services/slack";
+import CalTopoClient, { CaltopoMembership } from "../lib/remote-services/caltopo";
+import { D4HClient, D4HMember } from "../lib/remote-services/d4h";
+import WorkspaceClient, { GoogleUser } from "../lib/remote-services/googleWorkspace";
+import SlackClient from "../lib/remote-services/slack";
 import { type Member as SlackMember } from '@slack/web-api';
 
 interface SARMember {

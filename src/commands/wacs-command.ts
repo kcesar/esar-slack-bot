@@ -1,8 +1,8 @@
 import { Block, MessageAttachment } from "@slack/web-api";
 import { asLookup, equalsInsensitive } from "../lib/util";
-import { D4HClient } from "../remote-services/d4h";
-import WorkspaceClient from "../remote-services/googleWorkspace";
-import SlackClient, { SlashCommandLite } from "../remote-services/slack";
+import { D4HClient } from "../lib/remote-services/d4h";
+import WorkspaceClient from "../lib/remote-services/googleWorkspace";
+import SlackClient, { SlashCommandLite } from "../lib/remote-services/slack";
 
 /**
  * 
