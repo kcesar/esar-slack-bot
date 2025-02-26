@@ -1,8 +1,7 @@
-import { TeamGroup, TeamMember } from "./types";
+import { CheckConcern, TeamGroup, TeamMember } from "./types";
 import { Logger } from 'winston';
 import { equalsInsensitive } from '../../src-x/lib/util';
 import getLogger, { LogFactory } from '../lib/logging';
-import { groupsmigration } from "googleapis/build/src/apis/groupsmigration";
 
 
 export const TEMPLATE_MEMBER: TeamMember = {
@@ -20,6 +19,7 @@ export interface PrimaryModelAgent extends ModelAgent {
 export interface ModelAgent {
   readonly name: string;
   populateMembers(members: TeamMember[]): void;
+  getMemberConcerns(member: TeamMember): CheckConcern[];
 }
 
 export default class TeamModelContainer {
@@ -32,6 +32,10 @@ export default class TeamModelContainer {
     this.members = members;
     this.groups = groups;
     this.logger = logFactory('team-model');
+  }
+
+  getAllMembers() {
+    return this.members;
   }
 
   searchForMember(key: string) {

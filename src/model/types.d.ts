@@ -33,3 +33,9 @@ export interface TeamMember {
   photo?: string;
   platforms: Record<string, unknown>;
 }
+
+export interface CheckConcern {
+  concern: string;
+  platform?: string;
+  level?: 'warn'|'fix'|'error';
+}
