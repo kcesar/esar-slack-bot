@@ -21,6 +21,7 @@ interface D4HModelSettings extends D4HPlatformSettings {
   teamName: string;
   statusGroups: TeamStatus[];
   expectations: Record<string, { course: string, type: 'simple' }[]>;
+  addGroupMembers: Record<string, string[]>;
 }
 
 export default class D4HAgent implements ModelAgent {
@@ -129,6 +130,28 @@ export default class D4HAgent implements ModelAgent {
     if (unitStatus?.includes(this.settings.teamName)) {
       add(`Non-member has "${this.settings.teamName}" in unit status: ${unitStatus ?? ''}`);
     }
+    return concerns;
+  }
+
+  getMembershipConcerns(member: TeamMember, groups: TeamGroup[]): CheckConcern[] {
+    const [ concerns, add ] = getConcernList(this.name);
+    
+    if (member.teamStatus.current) {
+      const statusGroups = this.settings.statusGroups.filter(sg => sg.title !== this.settings.teamName && member.groups.some(mg => mg.title === sg.title));
+      if (statusGroups.length > 1) {
+        add(`Member belongs to multiple status groups: ${statusGroups.map(g => g.title)}`);
+      }
+    } else if (member.teamStatus.trainee) {
+
+    } else {
+      const teamGroups = member.groups
+        .map(g => ({ ...g, settingsAllow: this.settings.addGroupMembers[g.title]?.some(email => member.emails.includes(email))}))
+        .filter(g => !g.settingsAllow && g.title.startsWith(`${this.settings.teamName} `));
+      if (teamGroups.length > 0) {
+        add(`Non-Member belongs to group(s) ${teamGroups.map(g => g.title)}`);
+      }
+    }
+
     return concerns;
   }
 

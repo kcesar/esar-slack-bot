@@ -20,6 +20,7 @@ export interface ModelAgent {
   readonly name: string;
   populateMembers(members: TeamMember[]): void;
   getMemberConcerns(member: TeamMember): CheckConcern[];
+  getMembershipConcerns(member: TeamMember, groups: TeamGroup[]);
 }
 
 export default class TeamModelContainer {
@@ -36,6 +37,10 @@ export default class TeamModelContainer {
 
   getAllMembers() {
     return this.members;
+  }
+
+  getAllGroups() {
+    return this.groups;
   }
 
   searchForMember(key: string) {

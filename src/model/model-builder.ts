@@ -2,6 +2,7 @@ import { Logger } from "winston";
 import getLogger, { LogFactory } from "../lib/logging";
 import TeamModelContainer, { ModelAgent, PrimaryModelAgent } from "./team-model";
 import { CheckConcern, TeamMember } from "./types";
+import { getConcernList } from "./agents/agent-utils";
 
 export default class ModelBuilder {
   private readonly primaryAgent: PrimaryModelAgent;
@@ -65,10 +66,31 @@ export default class ModelBuilder {
       }
 
       for (const agent of [ this.primaryAgent, ...this.agents ]) {
-        
         concerns.push(...agent.getMemberConcerns(member));
       }
 
+      if (concerns.length) {
+        results.push({ member, concerns });
+      }
+    }
+    return results;
+  }
+
+  getModelGroupMembershipReport() {
+    const results: { member: TeamMember, concerns: CheckConcern[] }[] = [];
+    const model = this.buildModel();
+    const members = model.getAllMembers().sort((a,b) => {
+      let d = a.name.last.localeCompare(b.name.last);
+      if (d === 0) d = a.name.first.localeCompare(b.name.first);
+      if (d === 0) d = (a.teamEmail??'').localeCompare(b.teamEmail??'');
+      return d;
+    });
+    const groups = model.getAllGroups();
+    for (const member of members) {
+      const [ concerns ] = getConcernList();
+      for (const agent of [ this.primaryAgent, ...this.agents ]) {
+        concerns.push(...agent.getMembershipConcerns(member, groups));
+      }
       if (concerns.length) {
         results.push({ member, concerns });
       }
