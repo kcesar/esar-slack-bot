@@ -1,33 +1,32 @@
 import { Block, MessageAttachment } from "@slack/web-api";
 import { asLookup, equalsInsensitive } from "../lib/util";
-import { D4HClient } from "../lib/remote-services/d4h";
-import WorkspaceClient from "../lib/remote-services/googleWorkspace";
-import SlackClient, { SlashCommandLite } from "../lib/remote-services/slack";
+import getLogger from "../lib/logging";
+import { TeamMember } from "../model/types";
+import ModelBuilder from "../model/model-builder";
+import { TrainingPlatform } from "../platforms/types";
+import SlackPlatform, { SlackUser, SlashCommandLite } from "../platforms/slack-platform";
+import TeamModelContainer from "../model/team-model";
 
+const logger = getLogger('command-wacs');
 /**
  * 
  * @param email 
  * @param d4h 
  * @returns 
  */
-async function getTrainingMessage(email: string, d4h: D4HClient): Promise<[string,MessageAttachment[]?]> {
-  const d4hMember = await d4h.getMemberByEmail(email);
-  if (!d4hMember) {
-    return [`Don't have a D4H user with email ${email}`];
-  }
-
-  const quals = asLookup(await d4h.getMemberQualifications(d4hMember.id), a => a.qualification.id);
+async function getTrainingMessage(member: TeamMember, training: TrainingPlatform): Promise<[string, MessageAttachment[]?]> {
+  const quals = asLookup(await training.getAwardsForMember(member), a => a.qualification.title);
   const lines: string[] = [];
   const now = new Date().getTime();
-  for (const group of [await d4h.getOperationalGroup(), ...d4hMember.groups]) {
+  for (const group of member.groups) {
     if (!group.expectations?.length) continue;
 
     lines.push(`*${group.title}*`);
     for (const e of group.expectations) {
-      const qual = quals[e.qualification.id];
+      const qual = quals[e.qualification.title];
       let status = '❌';
       if (qual) {
-        const expires = qual.endsAt == null ? null : new Date(qual.endsAt).getTime();
+        const expires = qual.expires == null ? null : new Date(qual.expires).getTime();
         const remaining = expires == null ? null : expires - now;
         if (remaining != null && remaining < 6 * 30 * 24 * 3600 * 1000) {
           status = remaining > 0 ? '⚠️' : status;
@@ -39,7 +38,7 @@ async function getTrainingMessage(email: string, d4h: D4HClient): Promise<[strin
     }
   }
 
-  return [`WACS and other required training for ${email}`, [{ text: `${lines.join('\n')}` }]];
+  return [`WACS and other required training for ${member.teamEmail}`, [{ text: `${lines.join('\n')}` }]];
 }
 
 /**
@@ -47,8 +46,8 @@ async function getTrainingMessage(email: string, d4h: D4HClient): Promise<[strin
  * @param d4h 
  * @returns 
  */
-async function getExpectations(d4h: D4HClient): Promise<[string, MessageAttachment]> {
-  const groupsWithExpectations = Object.values(await d4h.getGroups()).filter(g => g.expectations.length > 0);
+async function getExpectationsMessage(model: TeamModelContainer): Promise<[string, MessageAttachment]> {
+  const groupsWithExpectations = model.getAllGroups().filter(f => f.expectations.length > 0);
 
   let count = 0;
   const lines: string[] = [];
@@ -64,39 +63,54 @@ async function getExpectations(d4h: D4HClient): Promise<[string, MessageAttachme
 /**
  * 
  * @param slack 
- * @param d4h 
- * @param google 
  * @param body 
  * @returns 
  */
-export default async function doWacsCommand(slack: SlackClient, d4h: D4HClient, google: WorkspaceClient, body: SlashCommandLite) {
+export default async function doWacsCommand(buildModel: () => ModelBuilder, training: TrainingPlatform, slack: SlackPlatform, body: SlashCommandLite) {
+  logger.info(`CMD: "${body.text}" from ${body.user_id}`);
+  
+  const start = new Date().getTime();
+  const modelBuilder = buildModel();
+  const model = modelBuilder.buildModel();
+  logger.debug(`model time ${new Date().getTime() - start}`);
+
   if (body.text === 'expectations') {
-    const [t, a] = await getExpectations(d4h);
-    slack.post(body.channel_id, t, { attachments: [a]});
+    const [t, a] = await getExpectationsMessage(model);
+    slack.post(body.channel_id, t, { attachments: [a] });
     return;
   }
+  const { ts } = await slack.post(body.channel_id, "Hang on a minute ...");
+  logger.debug(`hang on time ${new Date().getTime() - start}`);
 
-  let email: string|undefined;
+
+  const members = model.getAllMembers();
+
+  let email: string | undefined;
   if (!body.text || equalsInsensitive(body.text, 'me') || equalsInsensitive(body.text, 'mine') || equalsInsensitive(body.text, 'self')) {
-    email = (await slack.getMemberById(body.user_id))?.profile.email;
+    email = members.find(m => (m.platforms[SlackPlatform.name] as SlackUser)?.id === body.user_id)?.teamEmail;
+    logger.debug(`email time ${new Date().getTime() - start}`);
   } else if (body.text.startsWith('<mailto:')) {
-    email = (await google.getUserFromEmail(body.text.split(/[:|]/)[1]))?.primaryEmail;
+    email = body.text.split(/[:|]/)[1];
   } else if (body.text.includes('@')) {
-    email = body.text
+    email = body.text;
   } else {
-    const emails = ((await google.getUsersByName(body.text)).filter(f => f.orgUnitPath === '/Members'));
+    logger.debug('finding user by name');
+    const emails = members.filter(f => equalsInsensitive(f.name.preferredFull, body.text));
+    logger.debug(`matching emails ${emails}`);
     if (emails.length == 1) {
-      email = emails[0].primaryEmail;
+      email = emails[0].teamEmail;
     }
   }
-
-  let attachments: MessageAttachment[]|undefined = undefined;
+  const member = email ? members.find(f => f.teamEmail === email) : undefined;
+  logger.debug(`member time ${email} ${new Date().getTime() - start}`);
+  let attachments: MessageAttachment[] | undefined = undefined;
   let text: string;
-  if (!email) {
+  if (!member) {
     text = `I don't know "${body.text}".`;
   } else {
-    [ text, attachments ] = await getTrainingMessage(email, d4h);
+    [text, attachments] = await getTrainingMessage(member, training);
   }
 
-  await slack.post(body.channel_id, text, { attachments });
+  logger.info(`/wacs time ${new Date().getTime() - start}`);
+  await slack.post(body.channel_id, text, { attachments, replaceTs: ts });
 }

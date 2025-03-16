@@ -2,7 +2,8 @@ import Axios, { AxiosInstance } from "axios";
 import { BasePlatform, PlatformCache } from "./base-platform";
 import { Logger } from "winston";
 import getLogger from "../lib/logging";
-import { D4HPlatformSettings, D4HSecrets, v2Member, v3Group, v3Qualification } from "./d4h-types";
+import { D4HPlatformSettings, D4HSecrets, v2Member, v3Award, v3Group, v3Qualification } from "./d4h-types";
+import { MemberTrainingAward, TeamMember } from "../model/types";
 
 export const OPERATIONAL_STATUS_API_GROUP = { id: -1, title: 'OPERATIONAL', _virtual: true };
 
@@ -16,12 +17,13 @@ export interface D4HCache extends PlatformCache {
 }
 
 export default class D4HPlatform extends BasePlatform<D4HCache> {
+  static readonly NAME = 'D4H';
   private readonly settings: D4HPlatformSettings;
   private readonly web: AxiosInstance;
   private readonly web2: AxiosInstance;
 
   constructor(settings: D4HPlatformSettings, secrets: D4HSecrets, logger?: Logger) {
-    super('D4H', { timestamp: 0, data: { members: [], groups: [], qualifications: [] } }, logger ?? getLogger('D4H'));
+    super(D4HPlatform.NAME, { timestamp: 0, data: { members: [], groups: [], qualifications: [] } }, logger ?? getLogger('D4H'));
     this.web = Axios.create({
       baseURL: `https://api.team-manager.us.d4h.com/v3/team/${settings.teamId}/`,
       headers: {
@@ -51,6 +53,24 @@ export default class D4HPlatform extends BasePlatform<D4HCache> {
 
   getAllQualifications() {
     return this.cache.data.qualifications;
+  }
+
+  async getAwardsForMember(member: TeamMember): Promise<MemberTrainingAward[]> {
+    const apiMember = member.platforms[D4HPlatform.NAME] as v2Member;
+    if (!apiMember) {
+      return [];
+    }
+    
+    const apiAwards = await this.getChunkedList<v3Award>(`member-qualification-awards?member_id=${apiMember.id}`);
+
+    return apiAwards
+      .map(v3 => [v3, this.getAllQualifications().find(q => q.id === v3.qualification.id)] as [v3Award, v3Qualification])
+      .filter(f => f[1])
+      .map(([v3, qual]) => ({
+        qualification: { title: qual!.title },
+        completed: new Date(v3.startsAt).getTime(),
+        expires: v3.endsAt == null ? null : new Date(v3.endsAt).getTime(),
+      }));
   }
 
   async refreshCache(force?: boolean): Promise<void> {

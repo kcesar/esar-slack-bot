@@ -14,6 +14,7 @@ export abstract class BasePlatform<TCache extends PlatformCache> {
   protected readonly cache: TCache;
 
   readonly name: string;
+  private isRefreshing: boolean = false;
 
   constructor(name: string, emptyCache: TCache, logger: Logger) {
     this.name = name;
@@ -21,7 +22,27 @@ export abstract class BasePlatform<TCache extends PlatformCache> {
     this.logger = logger;
   }
 
-  abstract refreshCache(force?: boolean): Promise<void>;
+  async afterRefresh(wait?: boolean) {
+    const promise = this.refresh();
+    if (wait) {
+      await promise;
+    }
+    return this;
+  }
+
+  async refresh(force?: boolean): Promise<void> {
+    if (this.isRefreshing) {
+      this.logger.debug(`Already refreshing cache. Skipping this trigger.`);
+      return;
+    }
+    try {
+      await this.refreshCache(force);
+    } finally {
+      this.isRefreshing = false;
+    }
+  }
+
+  protected abstract refreshCache(force?: boolean): Promise<void>;
 
   async loadSavedCache() {
     let json: TCache;

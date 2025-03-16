@@ -29,6 +29,7 @@ export default class ModelBuilder {
       agent.populateMembers(members);
     }
     this.logger.debug('Build model time %d', new Date().getTime() - start);
+
     return new TeamModelContainer(
       members,
       groups,

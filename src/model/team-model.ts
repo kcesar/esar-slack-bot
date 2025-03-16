@@ -20,7 +20,7 @@ export interface ModelAgent {
   readonly name: string;
   populateMembers(members: TeamMember[]): void;
   getMemberConcerns(member: TeamMember): CheckConcern[];
-  getMembershipConcerns(member: TeamMember, groups: TeamGroup[]);
+  getMembershipConcerns(member: TeamMember, groups: TeamGroup[]): CheckConcern[];
 }
 
 export default class TeamModelContainer {

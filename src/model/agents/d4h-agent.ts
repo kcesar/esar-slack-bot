@@ -1,4 +1,5 @@
 import { Logger } from "winston";
+import { differenceInYears } from "date-fns";
 import getLogger, { LogFactory } from "../../lib/logging";
 import { ModelAgent, TEMPLATE_MEMBER } from "../team-model";
 import { CheckConcern, GroupExpectation, TeamGroup, TeamMember, TeamStatus } from "../types";
@@ -83,6 +84,11 @@ export default class D4HAgent implements ModelAgent {
   private checkActiveMember(member: TeamMember) {
     const [concerns, add] = getConcernList(this.name);
     const d4hMember = member.platforms[this.name] as v2Member;
+
+    // if (!this.getMemberDobText(d4hMember)) {
+    //   add('Does not have birthdate on record', 'warn');
+    // }
+
     if (d4hMember.status.value !== 'Operational') {
       add(`Has unexpected status: ${d4hMember.status.value}`);
     }
@@ -93,7 +99,7 @@ export default class D4HAgent implements ModelAgent {
     this.checkMemberJoinDate(d4hMember, add);
     const unitStatus = d4hMember.custom_fields.find(f => f.label === 'Unit Status')?.value;
     if (member.teamStatus.field && !unitStatus?.includes(this.settings.teamName)) {
-      add(`Unit status does not include "${this.settings.teamName}" in unit status: "${unitStatus ?? ''}"`);
+      //add(`Unit status does not include "${this.settings.teamName}" in unit status: "${unitStatus ?? ''}"`);
     }
     return concerns;
   }
@@ -123,6 +129,10 @@ export default class D4HAgent implements ModelAgent {
   private checkNonMember(member: TeamMember) {
     const [concerns, add] = getConcernList(this.name);
     const d4hMember = member.platforms[this.name] as v2Member;
+    if (!d4hMember) {
+      return;
+    }
+
     if (d4hMember.position.includes(this.settings.teamName)) {
       add(`Non-member has "${this.settings.teamName}" in position text: ${d4hMember.position}`);
     }
@@ -141,6 +151,16 @@ export default class D4HAgent implements ModelAgent {
       if (statusGroups.length > 1) {
         add(`Member belongs to multiple status groups: ${statusGroups.map(g => g.title)}`);
       }
+
+      const d4hMember = member.platforms[this.name] as v2Member;
+      const dobText = this.getMemberDobText(d4hMember);
+      if (dobText) {
+        const inYouthGroup = member.groups.some(g => g.title === 'ESAR Youth');
+        const age = differenceInYears(new Date(), new Date(dobText));
+        if (age < 21 !== inYouthGroup) {
+          add(`Membership in ESAR Youth not as expected: ${age} year-old is ${inYouthGroup ? '' : 'not '}in group`);
+        }
+      }
     } else if (member.teamStatus.trainee) {
 
     } else {
@@ -155,6 +175,9 @@ export default class D4HAgent implements ModelAgent {
     return concerns;
   }
 
+  private getMemberDobText(apiMember: v2Member|undefined) {
+    return apiMember?.custom_fields.find(f => f.label === 'DOB')?.value;
+  }
 
   private memberFromD4HMember(apiMember: v2Member, apiGroups: Record<number, TeamGroup>) {
     const lastFirst = apiMember.name;

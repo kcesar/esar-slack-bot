@@ -34,6 +34,12 @@ export interface TeamMember {
   platforms: Record<string, unknown>;
 }
 
+export interface MemberTrainingAward {
+  qualification: Qualification;
+  completed: number;
+  expires: number|null;
+}
+
 export interface CheckConcern {
   concern: string;
   platform?: string;
