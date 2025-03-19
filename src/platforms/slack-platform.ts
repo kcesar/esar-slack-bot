@@ -64,7 +64,7 @@ export default class SlackPlatform extends BasePlatform<SlackCache> {
     return await this.web.chat.postMessage({ channel, text, blocks: extra?.blocks, attachments: extra?.attachments });
   }
 
-  async send(rcpt: string, message: string|{ text: string, blocks: Block[] }) {
+  async send(rcpt: string, message: string|{ text: string, blocks?: Block[], attachments?: {text: string }[]  }) {
     const rcptId = await this.findChannel(rcpt);
     if (rcptId) {
       const args: ConversationsOpenArguments = rcpt.startsWith('@') ? { users: rcptId } : { channel: rcptId };

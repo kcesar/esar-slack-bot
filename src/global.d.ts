@@ -3,5 +3,6 @@ export interface Settings {
     D4H: {},
     Google: {},
     Slack: {},
+    CalTopo: {},
   }
 }

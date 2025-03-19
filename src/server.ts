@@ -18,6 +18,8 @@ import GoogleAgent from './model/agents/google-agent';
 import SlackAgent from './model/agents/slack-agent';
 import { split } from './lib/util';
 import { setupTasks } from './tasks';
+import CalTopoPlatform, { CalTopoSettings } from './platforms/caltopo-platform';
+import CalTopoAgent from './model/agents/caltopo-agent';
 
 config({ path: ['.env.local', '.env'], ignore: ['MISSING_ENV_FILE'] }) as Settings;
 const logger = getLogger('server');
@@ -93,7 +95,7 @@ async function startBotSocket(commands: CommandRouter) {
   await client.start();
 }
 
-function startServer(commands: CommandRouter, buildModel: (wait: boolean) => Promise<ModelBuilder>, slack: SlackPlatform): Promise<void> {
+function startServer(buildModel: (wait: boolean) => Promise<ModelBuilder>, slack: SlackPlatform): Promise<void> {
   return new Promise((resolve) => {
     const app = express();
     const port = process.env.PORT || 3000;
@@ -120,12 +122,18 @@ async function setupPlatforms(settings: Settings) {
   const slack = new SlackPlatform(settings.platforms.Slack as SlackSettings, {
     botToken: process.env.SLACK_BOT_TOKEN ?? ''
   });
+  const caltopo = new CalTopoPlatform(settings.platforms.CalTopo as CalTopoSettings, {
+    accountId: process.env.CALTOPO_ACCOUNT_ID ?? '',
+    authId: process.env.CALTOPO_AUTH_ID ?? '',
+    authSecret: process.env.CALTOPO_AUTH_SECRET ?? '',
+  });
 
   const start = new Date().getTime();
   await Promise.all([
     d4h.refresh(),
     google.refresh(),
     slack.refresh(),
+    caltopo.refresh(),
   ]);
   logger.debug('refresh cache time %d', new Date().getTime() - start);
 
@@ -133,6 +141,7 @@ async function setupPlatforms(settings: Settings) {
     d4h,
     google,
     slack,
+    caltopo,
     training: d4h,
   }
 }
@@ -143,21 +152,23 @@ async function startup() {
 
 
   const buildModel = async (waitForRefresh?: boolean) => {
-    const [ d4h, google, slack ] = await Promise.all([
+    const [ d4h, google, slack, caltopo ] = await Promise.all([
       platforms.d4h.afterRefresh(waitForRefresh),
       platforms.google.afterRefresh(waitForRefresh),
       platforms.slack.afterRefresh(waitForRefresh),
+      platforms.caltopo.afterRefresh(waitForRefresh),
     ])
 
     const modelBuilder = new ModelBuilder(new D4HAgent(settings.platforms.D4H, d4h, () => logger), () => logger);
     modelBuilder.addAgent(new GoogleAgent(settings.platforms.Google, google, () => logger));
     modelBuilder.addAgent(new SlackAgent(settings.platforms.Slack, slack, () => logger));
+    modelBuilder.addAgent(new CalTopoAgent({ ...settings.platforms.CalTopo, aliasEmails: settings.aliasEmails }, caltopo, () => logger));
     return modelBuilder;
   };
 
   const commands = new CommandRouter(buildModel, platforms.d4h, platforms.slack, getLogger('commands'));
   await startBotSocket(commands);
-  await startServer(commands, buildModel, platforms.slack);
+  await startServer(buildModel, platforms.slack);
 }
 
 startup();

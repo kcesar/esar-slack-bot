@@ -200,14 +200,13 @@ export default class D4HAgent implements ModelAgent {
     const member: TeamMember = {
       ...TEMPLATE_MEMBER,
       name: { last, first, lastFirst, preferred, preferredFull },
-      teamEmail: '',
       emails: [],
       teamStatus: teamStatus,
       platforms: {},
       groups,
     };
     member.emails = this.getD4HEmails(apiMember);
-    member.teamEmail = member.emails.find(e => e.toLowerCase().endsWith(`@${this.settings.teamEmailDomain}`))?.toLowerCase() ?? '';
+    member.teamEmail = member.emails.find(e => e.toLowerCase().endsWith(`@${this.settings.teamEmailDomain}`))?.toLowerCase();
     return member;
   }
 
