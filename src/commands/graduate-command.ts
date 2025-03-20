@@ -19,6 +19,7 @@ interface Platforms {
 
 interface Settings {
   auth: string[];
+  notify: string[];
 }
 
 const logger = getLogger('command-graduate');
@@ -109,6 +110,9 @@ export default async function doGraduateCommand(settings: Settings, buildModel: 
     await google.addToGroup(googleUser.primaryEmail, "members" + "@kcesar.org");
     await google.updateUser(googleUser.primaryEmail, { orgUnitPath: '/Members' });
     await im(`Graduated ${googleUser.primaryEmail} :partying_face:`);
+    for (const notify of settings.notify) {
+      await slack.send(notify, `${userEmail} ran /graduate command for ${googleUser.primaryEmail}`);
+    }
   } catch (error) {
     await im(`:exclamation: ${error}`);
   }
