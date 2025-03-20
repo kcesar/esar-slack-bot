@@ -77,6 +77,19 @@ export default class GooglePlatform extends BasePlatform<GoogleCache> {
     });
   }
 
+  async addToGroup(email: string, group: string) {
+    const jwtClient = await this.getJwtClient();
+    const dir = google.admin('directory_v1');
+    await dir.members.insert({
+      auth: jwtClient,
+      groupKey: group,
+      requestBody: {
+        email,
+        role: 'MEMBER'
+      },
+    });
+  }
+
   async refreshCache(force?: boolean): Promise<void> {
     this.logger.info('refreshcache %s', this.cache);
     if (this.cache.timestamp === 0) {

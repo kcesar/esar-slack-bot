@@ -55,6 +55,7 @@ export default async function doGraduateCommand(settings: Settings, buildModel: 
   const trainee = traineeMatches[0];
 
   const googleUser = trainee.platforms['Google'] as GoogleUser;
+  
   if (googleUser.orgUnitPath !== '/Trainees') {
     await im(`${googleUser.primaryEmail} is not in the /Trainees Google OU. Aborting.`);
     return;
@@ -65,10 +66,15 @@ export default async function doGraduateCommand(settings: Settings, buildModel: 
     return;
   }
 
+  const esarD4HGroup = model.getAllGroups().find(f => f.title === 'ESAR')?.platforms['D4H'] as v3Group;
   const esarFieldD4HGroup = model.getAllGroups().find(f => f.title === 'ESAR Field')?.platforms['D4H'] as v3Group;
   const esarTraineesD4HGroup = model.getAllGroups().find(f => f.title === 'ESAR Trainee')?.platforms['D4H'] as v3Group;
   const basicTrainingQualification = d4h.getAllQualifications().find(q => q.title === 'ESAR Basic Training')?.id;
 
+  if (!esarD4HGroup) {
+    im(`Can't find "ESAR" D4H group`);
+    return;
+  }
   if (!esarFieldD4HGroup) {
     im(`Can't find "ESAR Field" D4H group`);
     return;
@@ -82,22 +88,28 @@ export default async function doGraduateCommand(settings: Settings, buildModel: 
     return;
   }
 
-  // Award "ESAR Basic Training"
-  const award = "ESAR Basic Training"
-  const basicTrainingAward = (await d4h.getAwardsForMember(trainee)).find(a => a.qualification.title === award);
-  if (!basicTrainingAward) {
-    await d4h.addAwardForMember(trainee, award, new Date());
+  try {
+    // Award "ESAR Basic Training"
+    const award = "ESAR Basic Training"
+    const basicTrainingAward = (await d4h.getAwardsForMember(trainee)).find(a => a.qualification.title === award);
+    if (!basicTrainingAward) {
+      await d4h.addAwardForMember(trainee, award, new Date());
+    }
+
+    // Move from "ESAR Trainee" to "ESAR Field"
+    await d4h.addToGroup(d4hUser.id, esarD4HGroup.id);
+    await d4h.addToGroup(d4hUser.id, esarFieldD4HGroup.id);
+    await d4h.removeFromGroup(d4hUser.id, esarTraineesD4HGroup.id);
+
+    // D4H position field should include "ESAR TM"
+    await d4h.updateMember(d4hUser.id, {
+      position: d4hUser.position ? d4hUser.position.includes('ESAR') ? d4hUser.position : `${d4hUser.position}; ESAR TM` : 'ESAR TM'
+    })
+
+    await google.addToGroup(googleUser.primaryEmail, "members" + "@kcesar.org");
+    await google.updateUser(googleUser.primaryEmail, { orgUnitPath: '/Members' });
+    await im(`Graduated ${googleUser.primaryEmail} :partying_face:`);
+  } catch (error) {
+    await im(`:exclamation: ${error}`);
   }
-
-  // Move from "ESAR Trainee" to "ESAR Field"
-  await d4h.addToGroup(d4hUser.id, esarFieldD4HGroup.id);
-  await d4h.removeFromGroup(d4hUser.id, esarTraineesD4HGroup.id);
-
-  // D4H position field should include "ESAR TM"
-  await d4h.updateMember(d4hUser.id, {
-    position: d4hUser.position ? d4hUser.position.includes('ESAR') ? d4hUser.position : `${d4hUser.position}; ESAR TM` : 'ESAR TM'
-  })
-
-  await google.updateUser(googleUser.primaryEmail, { orgUnitPath: '/Members' });
-  await im(`Graduated ${googleUser.primaryEmail} :partying_face:`);
 }
