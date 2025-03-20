@@ -7,7 +7,7 @@ import { GenericMessageEvent, MessageEvent } from '@slack/types';
 
 import getLogger from './lib/logging';
 import D4HPlatform from './platforms/d4h-platform';
-import GooglePlatform from './platforms/google-platform';
+import GooglePlatform, { GooglePlatformSettings } from './platforms/google-platform';
 import SlackPlatform, { SlackSettings } from './platforms/slack-platform';
 import { Settings } from './global';
 import { D4HPlatformSettings } from './platforms/d4h-types';
@@ -114,7 +114,7 @@ async function setupPlatforms(settings: Settings) {
     v2Token: process.env.D4H_V2_TOKEN ?? '',
     v3Token: process.env.D4H_TOKEN ?? '',
   }, logger);
-  const google = new GooglePlatform(settings.platforms.Google, {
+  const google = new GooglePlatform(settings.platforms.Google as GooglePlatformSettings, {
     customer: process.env.GOOGLE_CUSTOMER ?? '',
     credentials: process.env.GOOGLE_CREDENTIALS ?? '',
     adminEmail: process.env.GOOGLE_ADMIN_ACCOUNT ?? '',
@@ -166,7 +166,7 @@ async function startup() {
     return modelBuilder;
   };
 
-  const commands = new CommandRouter(buildModel, platforms.d4h, platforms.slack, getLogger('commands'));
+  const commands = new CommandRouter(settings.commands, buildModel, platforms, getLogger('commands'));
   await startBotSocket(commands);
   await startServer(buildModel, platforms.slack);
 }

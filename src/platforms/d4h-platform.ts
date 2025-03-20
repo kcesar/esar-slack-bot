@@ -2,7 +2,7 @@ import Axios, { AxiosInstance } from "axios";
 import { BasePlatform, PlatformCache } from "./base-platform";
 import { Logger } from "winston";
 import getLogger from "../lib/logging";
-import { D4HPlatformSettings, D4HSecrets, v2Member, v3Award, v3Group, v3Qualification } from "./d4h-types";
+import { D4HPlatformSettings, D4HSecrets, v2Member, v3Award, v3Group, v3Member, v3Qualification } from "./d4h-types";
 import { MemberTrainingAward, TeamMember } from "../model/types";
 
 export const OPERATIONAL_STATUS_API_GROUP = { id: -1, title: 'OPERATIONAL', _virtual: true };
@@ -53,6 +53,67 @@ export default class D4HPlatform extends BasePlatform<D4HCache> {
 
   getAllQualifications() {
     return this.cache.data.qualifications;
+  }
+
+  async updateMember(memberId: number, properties: Partial<v3Member>) {
+    await this.web.patch(`members/${memberId}`, properties);
+  }
+
+  async addToGroup(memberId: number, groupId: number) {
+    if (isNaN(memberId) || isNaN(groupId)) {
+      throw new Error("ids must be integers");
+    }
+    let membershipId: string|undefined;
+    try {
+      const data = (await this.web.get(`member-group-memberships?member_id=${memberId}`)).data;
+      membershipId = data.results.filter(g => g.group.id === groupId)?.[0].id;
+    } catch (err) {
+      // fall through to return false
+    }
+
+    if (!membershipId) {
+      await this.web.post('member-group-memberships', {
+        groupId,
+        memberId,
+      });
+    }
+  }
+
+  async removeFromGroup(memberId: number, groupId: number) {
+    if (isNaN(memberId) || isNaN(groupId)) {
+      throw new Error("ids must be integers");
+    }
+    let membershipId: string|undefined;
+    try {
+      const data = (await this.web.get(`member-group-memberships?member_id=${memberId}`)).data;
+      membershipId = data.results.filter(g => g.group.id === groupId)?.[0].id;
+    } catch (err) {
+      // fall through to return false
+    }
+
+    if (membershipId) {
+      const result = await this.web.delete(`member-group-memberships/${membershipId}`);
+      return true;
+    }
+    return false;
+  }
+
+  async addAwardForMember(member: TeamMember, awardTitle: string, completed: Date): Promise<void> {
+    const apiMember = member.platforms[D4HPlatform.NAME] as v2Member;
+    if (!apiMember) {
+      return;
+    }
+
+    const qualificationId = this.getAllQualifications().find(f => f.title === awardTitle)?.id;
+    if (!qualificationId) {
+      throw new Error(`Can't find qualification with title "${awardTitle}"`);
+    }
+
+    await this.web.post(`member-qualification-awards`, {
+      memberId: apiMember.id,
+      qualificationId,
+      startsAt: completed.toISOString(),
+    });
   }
 
   async getAwardsForMember(member: TeamMember): Promise<MemberTrainingAward[]> {

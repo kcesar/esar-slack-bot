@@ -67,6 +67,16 @@ export default class GooglePlatform extends BasePlatform<GoogleCache> {
     return this.cache.data.memberships.filter(m => m.email === userEmail && m.status === 'ACTIVE');
   }
 
+  async updateUser(email: string, properties: Partial<GoogleUser>) {
+    const jwtClient = await this.getJwtClient();
+    const dir = google.admin('directory_v1');
+    await dir.users.update({
+      auth: jwtClient,
+      userKey: email,
+      requestBody: properties,
+    });
+  }
+
   async refreshCache(force?: boolean): Promise<void> {
     this.logger.info('refreshcache %s', this.cache);
     if (this.cache.timestamp === 0) {

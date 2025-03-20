@@ -11,6 +11,11 @@ export interface v2Member {
   group_ids: number[];
 }
 
+export interface v3Member {
+  id: number;
+  position?: string;
+}
+
 export interface v3Group {
   id: number;
   title: string;

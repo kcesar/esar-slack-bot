@@ -7,6 +7,11 @@ import { TrainingPlatform } from "../platforms/types";
 import SlackPlatform, { SlackUser, SlashCommandLite } from "../platforms/slack-platform";
 import TeamModelContainer from "../model/team-model";
 
+interface Platforms {
+  training: TrainingPlatform,
+  slack: SlackPlatform,
+};
+
 const logger = getLogger('command-wacs');
 /**
  * 
@@ -66,11 +71,13 @@ async function getExpectationsMessage(model: TeamModelContainer): Promise<[strin
  * @param body 
  * @returns 
  */
-export default async function doWacsCommand(buildModel: () => ModelBuilder, training: TrainingPlatform, slack: SlackPlatform, body: SlashCommandLite) {
+export default async function doWacsCommand(buildModel: () => Promise<ModelBuilder>, platforms: Platforms, body: SlashCommandLite) {
+  const { training, slack } = platforms;
+  
   logger.info(`CMD: "${body.text}" from ${body.user_id}`);
   
   const start = new Date().getTime();
-  const modelBuilder = buildModel();
+  const modelBuilder = await buildModel();
   const model = modelBuilder.buildModel();
   logger.debug(`model time ${new Date().getTime() - start}`);
 
