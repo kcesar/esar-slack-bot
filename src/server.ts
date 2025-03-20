@@ -47,7 +47,6 @@ async function startBotSocket(commands: CommandRouter) {
 
       if (event?.text?.startsWith('test /')) {
         const parts = split(event.text, / /g, 3);
-        logger.debug(`parts ${event.text} ${JSON.stringify(parts)}`);
         commands.handle({
           command: parts[1],
           text: parts[2],
@@ -82,15 +81,15 @@ async function startBotSocket(commands: CommandRouter) {
   //   await ack();
   // });
 
-  // client.on('slash_commands', async ({ ack, body }) => {
-  //   try {
-  //     await ack();
-  //     await commands.handle(body);
-  //   } catch (err) {
-  //     console.log(body);
-  //     console.error(err);
-  //   }
-  // });
+  client.on('slash_commands', async ({ ack, body }) => {
+    try {
+      await ack();
+      await commands.handle(body);
+    } catch (err) {
+      console.log(body);
+      console.error(err);
+    }
+  });
 
   await client.start();
 }
