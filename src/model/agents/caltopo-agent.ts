@@ -67,16 +67,16 @@ export default class CalTopoAgent implements ModelAgent {
     const memberEmail = member.teamEmail ?? member.emails[0] ?? caltopoUser?.email ?? 'N/A';
 
     for (const team of this.settings.teams) {
-      let shouldBeInTeam = team.expectGroups?.some(settingGroupTitle => memberGroups.has(settingGroupTitle));
-      shouldBeInTeam ||= this.settings.extraMembers?.includes(memberEmail);
-
+      const isExtra = this.settings.extraMembers?.includes(memberEmail);
+      const shouldBeInTeam = isExtra || team.expectGroups?.some(settingGroupTitle => memberGroups.has(settingGroupTitle));
       const canBeInGroup = shouldBeInTeam || team.allowExternal || (member.teamStatus.current && team.allowMembers);
-      
+      const minPermission = isExtra ? 10 : team.minPermission ?? 10;
+
       if (shouldBeInTeam) {
         const permission = caltopoUser?.groups[team.id];
         if (!permission) {
           add(`Should be in CalTopo team "${team.name}"`);
-        } else if ((permission ?? 10) < (team.minPermission ?? 10)) {
+        } else if ((permission ?? 10) < minPermission) {
           add(`Permission ${team.minPermission ?? 10} is lower than required (${team.minPermission ?? 10})`);
         }
       } else if (caltopoUser?.groups[team.id] && !canBeInGroup) {

@@ -10,35 +10,27 @@ function emailToMarkdown(email?: string) {
 }
 
 function concernToMarkdown(concern: CheckConcern) {
-  const platformPrefix = concern.platform ? `${concern.platform} ` : '';
+  const platformPrefix = concern.platform ? `[${concern.platform}] ` : '';
   const emoji = concern.level === 'fix' ? ':exclamation: ' : '';
-  return `- ${emoji}${platformPrefix}${concern.concern}`;
+  return ` ${emoji}${platformPrefix}${concern.concern}`;
 }
 
 export async function membershipReportTask(modelBuilder: ModelBuilder) {
   const userParts = modelBuilder.getModelUserReport();
   const groupParts = modelBuilder.getModelGroupMembershipReport();
 
-  let slack: { text: string, blocks: Block[] }|undefined = undefined;
-  
-  if (userParts.length || groupParts.length) {
+  let slack: { text: string, attachments: { text: string }[] }|undefined = undefined;
+  let body: string|null = null;
 
-    const userMarkdown = userParts.map(user => [
-      `\n**${user.member.name.preferredFull}** ${emailToMarkdown(user.member.teamEmail) ?? 'N/A'}`,
+  if (userParts.length || groupParts.length) {
+    body = [...userParts, ...groupParts].map(user => [
+      `\n${user.member.name.preferredFull} ${emailToMarkdown(user.member.teamEmail ?? user.member.emails[0]) ?? 'N/A'}`,
       user.concerns.map(concernToMarkdown).join('\n')
       ].join('\n')
     ).join('\n');
-
-    slack = {
-      text: 'Membership report',
-      blocks: [
-        SlackPlatform.textToBlock('Took at look at different ESAR platforms. Found some things to check out:'),
-        SlackPlatform.markdownToBlock(userMarkdown),
-      ],
-    };
   }
 
   return {
-    slack
+    body
   };
 }

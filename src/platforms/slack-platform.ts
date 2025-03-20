@@ -65,13 +65,32 @@ export default class SlackPlatform extends BasePlatform<SlackCache> {
   }
 
   async send(rcpt: string, message: string|{ text: string, blocks?: Block[], attachments?: {text: string }[]  }) {
+    const channel = await this.getConversationForRecipient(rcpt);
+    if (channel) {
+      await this.web.chat.postMessage(typeof message === 'string' ? {channel, text: message } : { channel, ...message });
+    }
+  }
+
+  private async getConversationForRecipient(rcpt: string) {
     const rcptId = await this.findChannel(rcpt);
-    if (rcptId) {
-      const args: ConversationsOpenArguments = rcpt.startsWith('@') ? { users: rcptId } : { channel: rcptId };
-      const channel = (await this.web.conversations.open(args)).channel?.id;
-      if (channel) {
-        await this.web.chat.postMessage(typeof message === 'string' ? {channel, text: message } : { channel, ...message });
-      }
+    if (!rcptId) {
+      return undefined;
+    }
+
+    const args: ConversationsOpenArguments = rcpt.startsWith('@') ? { users: rcptId } : { channel: rcptId };
+    return (await this.web.conversations.open(args)).channel?.id;
+  }
+
+  async uploadText(rcpt: string, intro: string, filename: string, content: string) {
+    const channel = await this.getConversationForRecipient(rcpt);
+    if (channel) {
+      await this.web.filesUploadV2({
+      //console.log({
+        channel_id: channel,
+        initial_comment: intro,
+        content,
+        filename,
+      })
     }
   }
 

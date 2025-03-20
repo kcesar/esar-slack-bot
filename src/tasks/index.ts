@@ -13,12 +13,17 @@ export function setupTasks(app: Express, buildModel: (wait: boolean) => Promise<
 
     const model = await buildModel(true);
     const result = await membershipReportTask(model);
-    if (result.slack) {
+    if (result.body && !req.query.noslack) {
         for (const target of to.split(';').map(f => f.trim())) {
-          await slack.send(target, result.slack);
+          if (result.body.length > 5000) {
+            await slack.uploadText(target, "Membership report", "membership-report.txt", result.body.replaceAll(':exclamation:', '!!'));
+          } else {
+            await slack.post(target, "Membership Report:\n" + result.body);
+          }
+          
         }
     }
 
-    res.json({ status: 'ok', result: { } });
+    res.json({ status: 'ok', result: result.body });
   });
 }

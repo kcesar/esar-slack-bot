@@ -66,6 +66,23 @@ export default class GoogleAgent implements ModelAgent {
   }
 
   getMembershipConcerns(member: TeamMember, groups: TeamGroup[]): CheckConcern[] {
-    return [];
+    const [ concerns, add ] = getConcernList(this.name);
+    const googleUser = member.platforms[this.name] as GoogleUser|undefined;
+    const memberGroups = new Set(member.groups.map(g => g.title));
+    if (!googleUser) {
+      return concerns;
+    }
+
+    const memberships = this.google.getUserMemberships(googleUser.primaryEmail);
+    for (const group of this.settings.groups) {
+      const isInGroup = !!memberships.find(m => m.group === group.email);
+      const shouldBeInGroup = memberGroups.has(group.title);
+
+      if (isInGroup !== shouldBeInGroup) {
+        add(`Should${shouldBeInGroup ? '' : ' not'} be in group ${group.email}`);
+      }
+    }
+
+    return concerns;
   }
 }

@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
-import { google } from 'googleapis';
+import { JWT } from 'google-auth-library';
+import { admin_directory_v1, google } from 'googleapis';
 import { Logger } from "winston";
 import { BasePlatform, PlatformCache } from "./base-platform";
 import getLogger from "../lib/logging";
@@ -20,9 +21,18 @@ export interface GoogleUser {
   suspensionReason: string;
 }
 
+interface GoogleMembership {
+  email: string; // Member email
+  group: string;
+  role: string;
+  type: 'USER'|'GROUP';
+  status: 'ACTIVE'|'SUSPENDED';
+}
+
 export interface GoogleCache extends PlatformCache {
   data: {
-    users: GoogleUser[]
+    users: GoogleUser[],
+    memberships: (GoogleMembership)[],
   }
 }
 
@@ -33,6 +43,10 @@ export interface GoogleSecrets {
 }
 
 export interface GooglePlatformSettings {
+  groups: {
+    title: string,
+    email: string,
+  }[];
 }
 
 export default class GooglePlatform extends BasePlatform<GoogleCache> {
@@ -40,12 +54,17 @@ export default class GooglePlatform extends BasePlatform<GoogleCache> {
   private readonly secrets: GoogleSecrets;
 
   constructor(settings: GooglePlatformSettings, secrets: GoogleSecrets, logger?: Logger) {
-    super('Google', { timestamp: 0, data: { users: [] } }, logger ?? getLogger('Google'));
+    super('Google', { timestamp: 0, data: { users: [], memberships: [] } }, logger ?? getLogger('Google'));
+    this.settings = settings;
     this.secrets = secrets;
   }
 
   getAllUsers() {
     return this.cache.data.users;
+  }
+
+  getUserMemberships(userEmail: string): GoogleMembership[] {
+    return this.cache.data.memberships.filter(m => m.email === userEmail && m.status === 'ACTIVE');
   }
 
   async refreshCache(force?: boolean): Promise<void> {
@@ -82,13 +101,40 @@ export default class GooglePlatform extends BasePlatform<GoogleCache> {
       this.logger.debug(`Loaded ${lastLength} users`);
     } while (lastLength >= PAGE_SIZE);
 
+    const groupGetter: (id: string) => Promise<Omit<GoogleMembership, 'group'>[]> = this.getGroupMembers.bind(this, jwtClient, dir);
+    const memberships = (await Promise.all(this.settings.groups.flatMap(groupSetting => {
+      return groupGetter(groupSetting.email).then(list => {
+        const m = list.map(membership => ({ ...membership, group: groupSetting.email }));
+        return m;
+      });
+    }))).flatMap(m => m);
+
+
     Object.assign(this.cache, {
       timestamp: new Date().getTime(),
       data: {
         users,
+        memberships,
       },
     });
     await this.saveCache();
+  }
+
+  private async getGroupMembers(jwtClient: JWT, directory: admin_directory_v1.Admin, groupId: string) {
+    let nextPage: string | undefined = undefined;
+    let members: Omit<GoogleMembership, 'group'>[] = [];
+
+    do {
+      const data = (await directory.members.list({
+        groupKey: `${groupId}@kcesar.org`,
+        auth: jwtClient,
+        maxResults: 200,
+        pageToken: nextPage
+      })).data;
+      nextPage = data.nextPageToken;
+      members = members.concat(data.members as Omit<GoogleMembership, 'group'>[]);
+    } while (nextPage);
+    return members;
   }
 
   
