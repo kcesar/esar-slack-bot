@@ -1,7 +1,7 @@
 import { CheckConcern, TeamGroup, TeamMember } from "./types";
 import { Logger } from 'winston';
-import { equalsInsensitive } from '../../src-x/lib/util';
 import getLogger, { LogFactory } from '../lib/logging';
+import { equalsInsensitive } from "../lib/util";
 
 
 export const TEMPLATE_MEMBER: TeamMember = {
