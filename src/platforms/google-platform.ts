@@ -1,4 +1,3 @@
-import * as fs from 'fs/promises';
 import { JWT } from 'google-auth-library';
 import { admin_directory_v1, google } from 'googleapis';
 import { Logger } from "winston";
