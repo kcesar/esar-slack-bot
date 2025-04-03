@@ -18,9 +18,8 @@ export function setupTasks(app: Express, buildModel: (wait: boolean) => Promise<
           if (result.body.length > 5000) {
             await slack.uploadText(target, "Membership report", "membership-report.txt", result.body.replaceAll(':exclamation:', '!!'));
           } else {
-            await slack.post(target, "Membership Report:\n" + result.body);
+            await slack.send(target, "Membership Report:\n" + result.body);
           }
-          
         }
     }
 
