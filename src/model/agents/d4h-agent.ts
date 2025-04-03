@@ -106,7 +106,7 @@ export default class D4HAgent implements ModelAgent {
 
   private checkMemberJoinDate(d4hMember: v2Member, add: (text: string, level?: "warn" | "fix" | "error") => void) {
     const unitJoinDateField = d4hMember.custom_fields.find(f => f.label === 'Joined Unit Date')?.value;
-    const unitJoinDate = unitJoinDateField?.split(/[;\,]/g).map(f => f.trim()).filter(f => f) ?? [];
+    const unitJoinDate = unitJoinDateField?.split(/[;\,]/g).map(f => f.trim()).filter(f => f && !f.includes("past-")) ?? [];
     if (unitJoinDate.length == 0) {
       add(`Has no "Unit Join Date"`);
     } else {
