@@ -1,4 +1,4 @@
-import { Block, MessageAttachment } from "@slack/web-api";
+import { MessageAttachment } from "@slack/web-api";
 import { asLookup, equalsInsensitive } from "../lib/util";
 import getLogger from "../lib/logging";
 import { TeamMember } from "../model/types";

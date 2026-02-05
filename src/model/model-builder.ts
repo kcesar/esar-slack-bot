@@ -46,7 +46,7 @@ export default class ModelBuilder {
       if (d === 0) d = (a.teamEmail??'').localeCompare(b.teamEmail??'');
       return d;
     });
-    for (const member of members) {
+    for (const member of members.filter(f => f.teamStatus.title !== 'Retired')) {
       const concerns: CheckConcern[] = [];
       if (member.teamStatus.current) {
         if (member.teamEmail) {

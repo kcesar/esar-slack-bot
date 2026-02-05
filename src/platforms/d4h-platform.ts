@@ -2,28 +2,35 @@ import Axios, { AxiosInstance } from "axios";
 import { BasePlatform, PlatformCache } from "./base-platform";
 import { Logger } from "winston";
 import getLogger from "../lib/logging";
-import { D4HPlatformSettings, D4HSecrets, v2Member, v3Award, v3Group, v3Member, v3Qualification } from "./d4h-types";
+import { D4HPlatformSettings, D4HSecrets, v3Award, v3CustomField, v3Group, v3GroupMembership, v3Member, v3Qualification } from "./d4h-types";
 import { MemberTrainingAward, TeamMember } from "../model/types";
 
 export const OPERATIONAL_STATUS_API_GROUP = { id: -1, title: 'OPERATIONAL', _virtual: true };
 
+function toStr(n: number | undefined): string|undefined {
+  return n == null ? n : n + '';
+}
+
+interface ApiList<T> {
+  results: T[];
+}
 
 export interface D4HCache extends PlatformCache {
   data: {
+    fields: v3CustomField[];
     groups: v3Group[];
-    members: v2Member[];
+    members: v3Member[];
+    memberships: v3GroupMembership[];
     qualifications: v3Qualification[];
   }
 }
 
 export default class D4HPlatform extends BasePlatform<D4HCache> {
   static readonly NAME = 'D4H';
-  private readonly settings: D4HPlatformSettings;
   private readonly web: AxiosInstance;
-  private readonly web2: AxiosInstance;
 
   constructor(settings: D4HPlatformSettings, secrets: D4HSecrets, logger?: Logger) {
-    super(D4HPlatform.NAME, { timestamp: 0, data: { members: [], groups: [], qualifications: [] } }, logger ?? getLogger('D4H'));
+    super(D4HPlatform.NAME, { timestamp: 0, data: { fields: [], members: [], groups: [], memberships: [], qualifications: [] } }, logger ?? getLogger('D4H'));
     this.web = Axios.create({
       baseURL: `https://api.team-manager.us.d4h.com/v3/team/${settings.teamId}/`,
       headers: {
@@ -32,14 +39,6 @@ export default class D4HPlatform extends BasePlatform<D4HCache> {
         }
       },
       //proxy: config.proxy || undefined,
-    });
-    this.web2 = Axios.create({
-      baseURL: 'https://api.d4h.org/v2/',
-      headers: {
-        common: {
-          Authorization: `Bearer ${secrets.v2Token}`
-        }
-      }
     });
   }
 
@@ -55,6 +54,18 @@ export default class D4HPlatform extends BasePlatform<D4HCache> {
     return this.cache.data.qualifications;
   }
 
+  getMemberCustomField(member: v3Member|undefined, fieldTitle: string) {
+    const fieldId = this.cache.data.fields.find(f => f.title === fieldTitle)?.id;
+    if (fieldId == null) return undefined;
+    return member?.customFieldValues.find(f => f.customField.id === fieldId)?.value;
+  }
+
+  getMemberGroups(member: v3Member): Array<v3Group> {
+    const memberships = this.cache.data.memberships.filter(f => f.member.id === member.id).map(f => f.group.id);
+    const groups = this.cache.data.groups.filter(f => memberships.includes(f.id));
+    return groups;
+  }
+
   async updateMember(memberId: number, properties: Partial<v3Member>) {
     await this.web.patch(`members/${memberId}`, properties);
   }
@@ -65,8 +76,8 @@ export default class D4HPlatform extends BasePlatform<D4HCache> {
     }
     let membershipId: string|undefined;
     try {
-      const data = (await this.web.get(`member-group-memberships?member_id=${memberId}`)).data;
-      membershipId = data.results.filter(g => g.group.id === groupId)?.[0].id;
+      const data = (await this.web.get<ApiList<v3GroupMembership>>(`member-group-memberships?member_id=${memberId}`)).data;
+      membershipId = toStr(data.results.filter(g => g.group.id === groupId)?.[0].id);
     } catch (err) {
       // fall through to return false
     }
@@ -85,8 +96,8 @@ export default class D4HPlatform extends BasePlatform<D4HCache> {
     }
     let membershipId: string|undefined;
     try {
-      const data = (await this.web.get(`member-group-memberships?member_id=${memberId}`)).data;
-      membershipId = data.results.filter(g => g.group.id === groupId)?.[0].id;
+      const data = (await this.web.get<ApiList<v3GroupMembership>>(`member-group-memberships?member_id=${memberId}`)).data;
+      membershipId = toStr(data.results.filter(g => g.group.id === groupId)?.[0].id);
     } catch (err) {
       // fall through to return false
     }
@@ -99,7 +110,7 @@ export default class D4HPlatform extends BasePlatform<D4HCache> {
   }
 
   async addAwardForMember(member: TeamMember, awardTitle: string, completed: Date): Promise<void> {
-    const apiMember = member.platforms[D4HPlatform.NAME] as v2Member;
+    const apiMember = member.platforms[D4HPlatform.NAME] as v3Member;
     if (!apiMember) {
       return;
     }
@@ -117,7 +128,7 @@ export default class D4HPlatform extends BasePlatform<D4HCache> {
   }
 
   async getAwardsForMember(member: TeamMember): Promise<MemberTrainingAward[]> {
-    const apiMember = member.platforms[D4HPlatform.NAME] as v2Member;
+    const apiMember = member.platforms[D4HPlatform.NAME] as v3Member;
     if (!apiMember) {
       return [];
     }
@@ -145,21 +156,26 @@ export default class D4HPlatform extends BasePlatform<D4HCache> {
     }
 
     this.logger.debug('getting data from D4H...');
-    const [groups, members, qualifications ] = await Promise.all([
+    const [fields, groups, members, memberships, qualifications ] = await Promise.all([
+      this.getChunkedList<v3CustomField>('custom-fields'),
       (async () => {
         return [
           ...await this.getChunkedList<v3Group>('member-groups'),
           JSON.parse(JSON.stringify(OPERATIONAL_STATUS_API_GROUP)),
         ];
       })(),
-      this.getChunkedList2<v2Member>(`team/members?include_details=true&include_custom_fields=true`),
+      this.getChunkedList<v3Member>(`members?status=OPERATIONAL`),
+      this.getChunkedList<v3GroupMembership>(`member-group-memberships`),
       this.getChunkedList<v3Qualification>('member-qualifications'),
     ]);
+    this.logger.debug('finished getting D4H data');
     Object.assign(this.cache, {
       timestamp: new Date().getTime(),
       data: {
+        fields,
         members,
         groups,
+        memberships,
         qualifications
       }
     });
@@ -171,17 +187,6 @@ export default class D4HPlatform extends BasePlatform<D4HCache> {
     let chunk: T[] = [];
     do {
       chunk = (await this.web.get(`${url}${url.includes('?') ? '&' : '?'}size=250&page=${Math.floor(list.length / 250)}`)).data.results as T[];
-      list = [...list, ...chunk];
-    } while (chunk.length >= 250);
-
-    return list;
-  }
-
-  async getChunkedList2<T>(url: string): Promise<T[]> {
-    let list: T[] = [];
-    let chunk: T[] = [];
-    do {
-      chunk = (await this.web2.get(`${url}${url.includes('?') ? '&' : '?'}limit=250&offset=${list.length}`)).data.data as T[];
       list = [...list, ...chunk];
     } while (chunk.length >= 250);
 

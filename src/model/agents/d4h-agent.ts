@@ -5,7 +5,7 @@ import { ModelAgent, TEMPLATE_MEMBER } from "../team-model";
 import { CheckConcern, GroupExpectation, TeamGroup, TeamMember, TeamStatus } from "../types";
 import D4HPlatform, { OPERATIONAL_STATUS_API_GROUP } from "../../platforms/d4h-platform";
 import { asLookup, equalsInsensitive, split } from "../../lib/util";
-import { D4HPlatformSettings, v2Member, v3Group, v3Qualification } from "../../platforms/d4h-types";
+import { D4HPlatformSettings, v3Group, v3Member, v3Qualification } from "../../platforms/d4h-types";
 import { getConcernList } from "./agent-utils";
 
 function cleanEmail(email: string | null | undefined) {
@@ -83,29 +83,29 @@ export default class D4HAgent implements ModelAgent {
 
   private checkActiveMember(member: TeamMember) {
     const [concerns, add] = getConcernList(this.name);
-    const d4hMember = member.platforms[this.name] as v2Member;
+    const d4hMember = member.platforms[this.name] as v3Member;
 
     // if (!this.getMemberDobText(d4hMember)) {
     //   add('Does not have birthdate on record', 'warn');
     // }
 
-    if (d4hMember.status.value !== 'Operational') {
-      add(`Has unexpected status: ${d4hMember.status.value}`);
+    if (d4hMember.status !== 'OPERATIONAL') {
+      add(`Has unexpected status: ${d4hMember.status}`);
     }
     const platformEmail = this.getD4HEmails(d4hMember).find(f => equalsInsensitive(member.teamEmail, f));
     if (member.teamEmail && platformEmail !== member.teamEmail) {
       add(`${platformEmail} is not lowercase`, 'warn');
     }
     this.checkMemberJoinDate(d4hMember, add);
-    const unitStatus = d4hMember.custom_fields.find(f => f.label === 'Unit Status')?.value;
+    const unitStatus = this.d4h.getMemberCustomField(d4hMember, 'Unit Status');
     if (member.teamStatus.field && !unitStatus?.includes(this.settings.teamName)) {
       //add(`Unit status does not include "${this.settings.teamName}" in unit status: "${unitStatus ?? ''}"`);
     }
     return concerns;
   }
 
-  private checkMemberJoinDate(d4hMember: v2Member, add: (text: string, level?: "warn" | "fix" | "error") => void) {
-    const unitJoinDateField = d4hMember.custom_fields.find(f => f.label === 'Joined Unit Date')?.value;
+  private checkMemberJoinDate(d4hMember: v3Member, add: (text: string, level?: "warn" | "fix" | "error") => void) {
+    const unitJoinDateField = this.d4h.getMemberCustomField(d4hMember, 'Joined Unit Date');
     const unitJoinDate = unitJoinDateField?.split(/[;\,]/g).map(f => f.trim()).filter(f => f && !f.includes("past-")) ?? [];
     if (unitJoinDate.length == 0) {
       add(`Has no "Unit Join Date"`);
@@ -128,15 +128,15 @@ export default class D4HAgent implements ModelAgent {
 
   private checkNonMember(member: TeamMember) {
     const [concerns, add] = getConcernList(this.name);
-    const d4hMember = member.platforms[this.name] as v2Member;
-    if (!d4hMember) {
+    const d4hMember = member.platforms[this.name] as v3Member;
+    if (!d4hMember || d4hMember.status === 'RETIRED') {
       return;
     }
 
-    if (d4hMember.position.includes(this.settings.teamName)) {
+    if (d4hMember.position?.includes(this.settings.teamName)) {
       add(`Non-member has "${this.settings.teamName}" in position text: ${d4hMember.position}`);
     }
-    const unitStatus = d4hMember.custom_fields.find(f => f.label === 'Unit Status')?.value;
+    const unitStatus = this.d4h.getMemberCustomField(d4hMember, 'Unit Status');
     if (unitStatus?.includes(this.settings.teamName)) {
       add(`Non-member has "${this.settings.teamName}" in unit status: ${unitStatus ?? ''}`);
     }
@@ -152,7 +152,7 @@ export default class D4HAgent implements ModelAgent {
         add(`Member belongs to multiple status groups: ${statusGroups.map(g => g.title)}`);
       }
 
-      const d4hMember = member.platforms[this.name] as v2Member;
+      const d4hMember = member.platforms[this.name] as v3Member;
       const dobText = this.getMemberDobText(d4hMember);
       if (dobText) {
         const inYouthGroup = member.groups.some(g => g.title === 'ESAR Youth');
@@ -175,28 +175,27 @@ export default class D4HAgent implements ModelAgent {
     return concerns;
   }
 
-  private getMemberDobText(apiMember: v2Member|undefined) {
-    return apiMember?.custom_fields.find(f => f.label === 'DOB')?.value;
+  private getMemberDobText(apiMember: v3Member|undefined) {
+    return this.d4h.getMemberCustomField(apiMember, 'DOB');
   }
 
-  private memberFromD4HMember(apiMember: v2Member, apiGroups: Record<number, TeamGroup>) {
+  private memberFromD4HMember(apiMember: v3Member, apiGroups: Record<number, TeamGroup>) {
     const lastFirst = apiMember.name;
     const [last, first] = split(lastFirst, /,/g, 2).map(f => f.trim());
     const preferred = first ? first : last;
     const preferredFull = first ? `${first} ${last}` : last;
 
-    if (apiMember.status.value === 'Operational') {
-      apiMember.group_ids.push(OPERATIONAL_STATUS_API_GROUP.id);
+    const memberships = this.d4h.getMemberGroups(apiMember);
+    if (apiMember.status === 'OPERATIONAL') {
+      memberships.push(OPERATIONAL_STATUS_API_GROUP);
     }
-
-    const groups = apiMember.group_ids
-      .map(gid => apiGroups[gid])
-      .filter(group => !!group);
+    const groups = apiMember.status === 'RETIRED' ? [] : memberships.map(grp => apiGroups[grp.id]).filter(grp => !!grp);
 
     let teamStatus = { title: '', current: false, mission: false, field: false };
     for (const status of this.settings.statusGroups.filter(setting => groups.some(g => g.title === setting.title))) {
       teamStatus = { ...teamStatus, ...status };
     }
+
     const member: TeamMember = {
       ...TEMPLATE_MEMBER,
       name: { last, first, lastFirst, preferred, preferredFull },
@@ -206,15 +205,17 @@ export default class D4HAgent implements ModelAgent {
       groups,
     };
     member.emails = this.getD4HEmails(apiMember);
-    member.teamEmail = member.emails.find(e => e.toLowerCase().endsWith(`@${this.settings.teamEmailDomain}`))?.toLowerCase();
+    if (apiMember.status !== 'RETIRED') {
+      member.teamEmail = member.emails.find(e => e.toLowerCase().endsWith(`@${this.settings.teamEmailDomain}`))?.toLowerCase();
+    }
     return member;
   }
 
-  private getD4HEmails(apiMember: v2Member) {
+  private getD4HEmails(apiMember: v3Member) {
     const memberEmails = new Set<string>();
-    if (cleanEmail(apiMember.email)) memberEmails.add(cleanEmail(apiMember.email)!);
+    if (cleanEmail(apiMember.email?.value)) memberEmails.add(cleanEmail(apiMember.email?.value)!);
 
-    const secondaryEmailText = apiMember.custom_fields.filter(f => f.label === 'Secondary Email')[0].value;
+    const secondaryEmailText = this.d4h.getMemberCustomField(apiMember, 'Secondary Email');
     if (secondaryEmailText) {
       for (const second of secondaryEmailText?.split(';').map(e => e.trim()).filter(e => e) ?? []) {
         memberEmails.add(second);

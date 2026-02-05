@@ -3,6 +3,7 @@ import * as path from 'path';
 import { Logger } from 'winston';
 
 const CACHE_DIR = path.join(__dirname, '../../data/platform-cache');
+console.log('CACHE_DIR', CACHE_DIR);
 
 export interface PlatformCache {
   timestamp: number;

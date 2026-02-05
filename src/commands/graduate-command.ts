@@ -1,15 +1,9 @@
-import { Block, MessageAttachment } from "@slack/web-api";
-import { asLookup, equalsInsensitive } from "../lib/util";
 import getLogger from "../lib/logging";
-import { TeamMember } from "../model/types";
 import ModelBuilder from "../model/model-builder";
-import { TrainingPlatform } from "../platforms/types";
-import SlackPlatform, { SlackUser, SlashCommandLite } from "../platforms/slack-platform";
-import TeamModelContainer from "../model/team-model";
+import SlackPlatform, { SlashCommandLite } from "../platforms/slack-platform";
 import GooglePlatform, { GoogleUser } from "../platforms/google-platform";
 import D4HPlatform from "../platforms/d4h-platform";
-import { v2Member, v3Group, v3Member } from "../platforms/d4h-types";
-import { startOfToday } from "date-fns";
+import { v3Group, v3Member } from "../platforms/d4h-types";
 
 interface Platforms {
   slack: SlackPlatform,
@@ -61,7 +55,7 @@ export default async function doGraduateCommand(settings: Settings, buildModel: 
     await im(`${googleUser.primaryEmail} is not in the /Trainees Google OU. Aborting.`);
     return;
   }
-  const d4hUser = trainee.platforms['D4H'] as v2Member;
+  const d4hUser = trainee.platforms['D4H'] as v3Member;
   if (!d4hUser) {
     await im(`Can't find D4H user for ${googleUser.primaryEmail}`);
     return;
