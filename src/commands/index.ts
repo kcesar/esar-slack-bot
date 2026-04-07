@@ -4,6 +4,7 @@ import ModelBuilder from "../model/model-builder";
 import { TrainingPlatform } from "../platforms/types";
 import doWacsCommand from "./wacs-command";
 import doGraduateCommand from './graduate-command';
+import doRankCommand from './rank-command';
 import GooglePlatform from "../platforms/google-platform";
 
 export default class CommandRouter {
@@ -15,6 +16,7 @@ export default class CommandRouter {
     this.settings = settings ?? {};
     this.handlers['/wacs'] = doWacsCommand.bind(undefined, buildModel, platforms);
     this.handlers['/graduate'] = doGraduateCommand.bind(undefined, this.settings['graduate'], buildModel, platforms);
+    this.handlers['/set-rank'] = doRankCommand.bind(undefined, this.settings['graduate'], buildModel, platforms);
     this.logger = logger;
   }
 

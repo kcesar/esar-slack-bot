@@ -1,4 +1,5 @@
 import { JWT } from 'google-auth-library';
+import { GaxiosError } from 'gaxios';
 import { admin_directory_v1, google } from 'googleapis';
 import { Logger } from "winston";
 import { BasePlatform, PlatformCache } from "./base-platform";
@@ -76,17 +77,41 @@ export default class GooglePlatform extends BasePlatform<GoogleCache> {
     });
   }
 
-  async addToGroup(email: string, group: string) {
+  /** returns true if a change was made */
+  async addToGroup(email: string, group: string, opts?: { ignoreExisting: boolean }) {
     const jwtClient = await this.getJwtClient();
     const dir = google.admin('directory_v1');
-    await dir.members.insert({
-      auth: jwtClient,
-      groupKey: group,
-      requestBody: {
-        email,
-        role: 'MEMBER'
-      },
-    });
+    try {
+      await dir.members.insert({
+        auth: jwtClient,
+        groupKey: group,
+        requestBody: {
+          email,
+          role: 'MEMBER'
+        },
+      });
+      return true;
+    } catch (err) {
+      if ((err as GaxiosError).response?.status !== 409 || !opts?.ignoreExisting) throw err;
+    }
+    return false;
+  }
+
+  /** Returns true if a change was made */
+  async removeFromGroup(email: string, group: string, opts?: { ignoreMissing: boolean }): Promise<boolean> {
+    const jwtClient = await this.getJwtClient();
+    const dir = google.admin('directory_v1');
+    try {
+      await dir.members.delete({
+        auth: jwtClient,
+        groupKey: group,
+        memberKey: email,
+      });
+      return true;
+    } catch (err) {
+      if ((err as GaxiosError).response?.status !== 404 || !opts?.ignoreMissing) throw err;
+    }
+    return false;
   }
 
   async refreshCache(force?: boolean): Promise<void> {

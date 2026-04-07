@@ -70,7 +70,8 @@ export default class D4HPlatform extends BasePlatform<D4HCache> {
     await this.web.patch(`members/${memberId}`, properties);
   }
 
-  async addToGroup(memberId: number, groupId: number) {
+  /** returns true if a change was made */
+  async addToGroup(memberId: number, groupId: number): Promise<boolean> {
     if (isNaN(memberId) || isNaN(groupId)) {
       throw new Error("ids must be integers");
     }
@@ -87,10 +88,13 @@ export default class D4HPlatform extends BasePlatform<D4HCache> {
         groupId,
         memberId,
       });
+      return true;
     }
+    return false;
   }
 
-  async removeFromGroup(memberId: number, groupId: number) {
+  /** returns true if a change was made */
+  async removeFromGroup(memberId: number, groupId: number): Promise<boolean> {
     if (isNaN(memberId) || isNaN(groupId)) {
       throw new Error("ids must be integers");
     }
@@ -148,7 +152,13 @@ export default class D4HPlatform extends BasePlatform<D4HCache> {
   async refreshCache(force?: boolean): Promise<void> {
     this.logger.info('refreshcache %s', this.cache);
     if (this.cache.timestamp === 0) {
-      await this.loadSavedCache();
+      try {
+        await this.loadSavedCache();
+      } catch (err) {
+        console.error('Failed to load D4H from cache: ' + err);
+        force = true;
+        // continue to check and refresh cache
+      }
     }
 
     if (new Date().getTime() - this.cache.timestamp < 15 * 60 * 1000 && !force) {
